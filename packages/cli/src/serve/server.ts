@@ -44,7 +44,7 @@ import { mountAcpHttp } from './acpHttp/index.js';
 import {
   canonicalizeWorkspace,
   CancelSentinelCollisionError,
-  createHttpAcpBridge,
+  createAcpSessionBridge,
   InvalidClientIdError,
   InvalidPermissionOptionError,
   InvalidSessionMetadataError,
@@ -63,8 +63,8 @@ import {
   WorkspaceInitRaceError,
   WorkspaceMismatchError,
   type BridgeSessionSummary,
-  type HttpAcpBridge,
-} from './httpAcpBridge.js';
+  type AcpSessionBridge,
+} from './acpSessionBridge.js';
 import {
   getAdvertisedServeFeatures,
   getServeProtocolVersions,
@@ -175,7 +175,7 @@ export function resolveBridgeFsFactory(input: {
 const WORKSPACE_SESSION_LIST_SIZE = 100;
 
 async function listWorkspaceSessionsForResponse(
-  bridge: HttpAcpBridge,
+  bridge: AcpSessionBridge,
   workspaceCwd: string,
 ): Promise<BridgeSessionSummary[]> {
   const persisted = await new SessionService(workspaceCwd).listSessions({
@@ -217,7 +217,7 @@ async function listWorkspaceSessionsForResponse(
 
 export interface ServeAppDeps {
   /** Bridge instance; tests inject a fake. Defaults to a fresh real one. */
-  bridge?: HttpAcpBridge;
+  bridge?: AcpSessionBridge;
   /**
    * Pre-canonicalized workspace path. When supplied, `createServeApp`
    * skips its own `canonicalizeWorkspace` call (which would issue a
@@ -473,7 +473,7 @@ export function createServeApp(
   });
   const bridge =
     deps.bridge ??
-    createHttpAcpBridge({
+    createAcpSessionBridge({
       maxSessions: opts.maxSessions,
       // Symmetric with `runQwenServe.ts` — direct embeds / tests that
       // call `createServeApp` without supplying their own bridge and
@@ -1572,7 +1572,7 @@ export function createServeApp(
           ...forwardedBody,
           sessionId,
           prompt,
-        } as Parameters<HttpAcpBridge['sendPrompt']>[1],
+        } as Parameters<AcpSessionBridge['sendPrompt']>[1],
         abort.signal,
         clientId !== undefined ? { clientId } : undefined,
       );
@@ -1702,7 +1702,7 @@ export function createServeApp(
         {
           ...(body as object),
           sessionId,
-        } as Parameters<HttpAcpBridge['cancelSession']>[1],
+        } as Parameters<AcpSessionBridge['cancelSession']>[1],
         clientId !== undefined ? { clientId } : undefined,
       );
       res.status(204).end();
@@ -1835,7 +1835,7 @@ export function createServeApp(
           ...(body as object),
           sessionId,
           modelId,
-        } as Parameters<HttpAcpBridge['setSessionModel']>[1],
+        } as Parameters<AcpSessionBridge['setSessionModel']>[1],
         clientId !== undefined ? { clientId } : undefined,
       );
       res.status(200).json(response);
@@ -2728,7 +2728,7 @@ const INVALID_PERMISSION_OUTCOME_ERROR =
   '`outcome` must be `{ outcome: "cancelled" }` or `{ outcome: "selected", optionId: string }`';
 
 type PermissionVoteResponse = Parameters<
-  HttpAcpBridge['respondToPermission']
+  AcpSessionBridge['respondToPermission']
 >[1];
 
 /**
@@ -2994,7 +2994,7 @@ export function detectFromLoopback(req: {
 function parseAndValidateWorkspaceClientId(
   req: import('express').Request,
   res: import('express').Response,
-  bridge: HttpAcpBridge,
+  bridge: AcpSessionBridge,
 ): string | undefined | null {
   const raw = parseClientIdHeader(req, res);
   if (raw === null || raw === undefined) return raw;
