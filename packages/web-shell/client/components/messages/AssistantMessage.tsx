@@ -1,9 +1,18 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { LightbulbIcon } from 'lucide-react';
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from 'react';
+import { LightbulbIcon, ThumbsDownIcon, ThumbsUpIcon } from 'lucide-react';
 import { Markdown } from './Markdown';
 import { TurnSources } from '../sources/TurnSources';
 import {
   useWebShellCustomization,
+  type WebShellAssistantFeedbackRating,
   type WebShellAssistantTurnFooterRenderInfo,
   type WebShellSource,
 } from '../../customization';
@@ -19,6 +28,8 @@ import {
 } from '../../utils/clipboard';
 import { useCopiedFlash } from '../../hooks/useCopiedFlash';
 import type { DaemonSessionGenerationEvent } from '@qwen-code/sdk/daemon';
+import type { DaemonMessageAuthor } from '../../adapters/messageTypes';
+import { AuthorAvatar } from './AuthorAvatar';
 import { Button } from '../ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import flashStyles from '../MessageLocateFlash.module.css';
@@ -26,11 +37,18 @@ import styles from './AssistantMessage.module.css';
 
 interface AssistantMessageProps {
   content: string;
+  author?: DaemonMessageAuthor;
   isStreaming?: boolean;
   timestamp?: number;
   onBranchSession?: () => void | Promise<void>;
   showFooterActions?: boolean;
   showBranchAction?: boolean;
+  /** Satisfied / not-satisfied marks are only offered when this is set. */
+  showAssistantFeedback?: boolean;
+  assistantFeedbackRating?: WebShellAssistantFeedbackRating;
+  onAssistantFeedbackRate?: (
+    rating: WebShellAssistantFeedbackRating | null,
+  ) => void;
   isLocateFlashing?: boolean;
   customFooterInfo?: WebShellAssistantTurnFooterRenderInfo;
   turnSources?: readonly WebShellSource[];
@@ -39,11 +57,15 @@ interface AssistantMessageProps {
 
 export const AssistantMessage = memo(function AssistantMessage({
   content,
+  author,
   isStreaming,
   timestamp,
   onBranchSession,
   showFooterActions = false,
   showBranchAction = false,
+  showAssistantFeedback = false,
+  assistantFeedbackRating,
+  onAssistantFeedbackRate,
   isLocateFlashing = false,
   customFooterInfo,
   turnSources,
@@ -84,8 +106,44 @@ export const AssistantMessage = memo(function AssistantMessage({
       })
       .catch(warnClipboardWriteFailure);
   }, [content, flashCopied]);
+  // Clicking the lit icon clears the mark; clicking the other one switches it.
+  const handleFeedback = useCallback(
+    (
+      rating: WebShellAssistantFeedbackRating,
+      event: ReactMouseEvent<HTMLButtonElement>,
+    ) => {
+      if (!onAssistantFeedbackRate) return;
+      onAssistantFeedbackRate(
+        assistantFeedbackRating === rating ? null : rating,
+      );
+      // A pointer click leaves the button focused, and the row's
+      // `:focus-within` rule would then pin this hover-only row open after the
+      // pointer leaves. Keyboard activation reports detail 0, so it keeps focus
+      // and the row stays reachable from the keyboard.
+      if (event.detail > 0) event.currentTarget.blur();
+    },
+    [assistantFeedbackRating, onAssistantFeedbackRate],
+  );
+  const feedbackButtonClass = useCallback(
+    (rating: WebShellAssistantFeedbackRating) => {
+      const activeClass =
+        rating === 'up'
+          ? styles.feedbackButtonActiveUp
+          : styles.feedbackButtonActiveDown;
+      return `${styles.copyButton} ${styles.feedbackButton}${
+        assistantFeedbackRating === rating ? ` ${activeClass}` : ''
+      }`;
+    },
+    [assistantFeedbackRating],
+  );
   return (
     <div className={styles.message}>
+      {author && (
+        <div className={styles.author}>
+          <AuthorAvatar name={author.name} color={author.color} />
+          <span className={styles.authorName}>{author.name}</span>
+        </div>
+      )}
       {content && (
         <div
           className={`${styles.content}${
@@ -116,6 +174,30 @@ export const AssistantMessage = memo(function AssistantMessage({
             >
               {copied ? <CheckIcon /> : <CopyIcon />}
             </button>
+          )}
+          {showFooterActions && showAssistantFeedback && (
+            <>
+              <button
+                type="button"
+                className={feedbackButtonClass('up')}
+                title={t('assistant.satisfied')}
+                aria-label={t('assistant.satisfied')}
+                aria-pressed={assistantFeedbackRating === 'up'}
+                onClick={(event) => handleFeedback('up', event)}
+              >
+                <ThumbsUpIcon />
+              </button>
+              <button
+                type="button"
+                className={feedbackButtonClass('down')}
+                title={t('assistant.dissatisfied')}
+                aria-label={t('assistant.dissatisfied')}
+                aria-pressed={assistantFeedbackRating === 'down'}
+                onClick={(event) => handleFeedback('down', event)}
+              >
+                <ThumbsDownIcon />
+              </button>
+            </>
           )}
           {showFooterActions && showBranchAction && onBranchSession && (
             <button
@@ -211,6 +293,7 @@ function BranchIcon() {
 
 interface ThinkingMessageProps {
   content: string;
+  author?: DaemonMessageAuthor;
   isStreaming?: boolean;
   timestamp?: number;
   isLocateFlashing?: boolean;
@@ -250,6 +333,8 @@ interface ThinkingSummaryHeaderProps {
   documentMode: boolean;
   /** Pre-localized running/done label, including the elapsed duration. */
   summaryText: string;
+  /** Whose thought this is, in a transcript with several agents. */
+  authorName?: string;
   /**
    * Thought content for the zh-CN translate button. Omitted while streaming —
    * the button is hidden then — so streamed content growth does not defeat the
@@ -271,6 +356,7 @@ const ThinkingSummaryHeader = memo(function ThinkingSummaryHeader({
   thinkingExpanded,
   documentMode,
   summaryText,
+  authorName,
   translateContent,
   showTranslateButton,
   generateContent,
@@ -308,6 +394,9 @@ const ThinkingSummaryHeader = memo(function ThinkingSummaryHeader({
         <span className={styles.thinkingSummaryIcon} aria-hidden="true">
           <ThinkingDoneIcon />
         </span>
+        {authorName && (
+          <span className={styles.thinkingAuthor}>{authorName}</span>
+        )}
         <span
           className={
             thinkingActive
@@ -341,6 +430,7 @@ const ThinkingSummaryHeader = memo(function ThinkingSummaryHeader({
 
 export const ThinkingMessage = memo(function ThinkingMessage({
   content,
+  author,
   isStreaming,
   timestamp,
   isLocateFlashing = false,
@@ -417,6 +507,7 @@ export const ThinkingMessage = memo(function ThinkingMessage({
               thinkingExpanded={showThinking}
               documentMode={documentMode}
               summaryText={summaryText}
+              authorName={author?.name}
               translateContent={thinkingActive ? undefined : content}
               showTranslateButton={
                 !documentMode &&

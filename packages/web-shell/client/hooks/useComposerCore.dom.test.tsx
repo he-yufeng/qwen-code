@@ -459,7 +459,10 @@ describe('useComposerCore history and drafts', () => {
       undefined,
       undefined,
       expect.any(Function),
-      undefined,
+      {
+        isCurrentDraft: expect.any(Function),
+        retainDraftDuringSessionCreation: expect.any(Function),
+      },
     );
   });
 
@@ -1108,7 +1111,10 @@ describe('useComposerCore paste', () => {
       undefined,
       undefined,
       expect.any(Function),
-      undefined,
+      {
+        isCurrentDraft: expect.any(Function),
+        retainDraftDuringSessionCreation: expect.any(Function),
+      },
     );
   });
 
@@ -1295,7 +1301,10 @@ describe('useComposerCore paste', () => {
         },
       ],
       expect.any(Function),
-      undefined,
+      {
+        isCurrentDraft: expect.any(Function),
+        retainDraftDuringSessionCreation: expect.any(Function),
+      },
     );
   });
 
@@ -1335,7 +1344,10 @@ describe('useComposerCore paste', () => {
         },
       ],
       expect.any(Function),
-      undefined,
+      {
+        isCurrentDraft: expect.any(Function),
+        retainDraftDuringSessionCreation: expect.any(Function),
+      },
     );
   });
 
@@ -1555,7 +1567,10 @@ describe('useComposerCore paste', () => {
       [expect.objectContaining({ media_type: 'image/png' })],
       undefined,
       expect.any(Function),
-      undefined,
+      {
+        isCurrentDraft: expect.any(Function),
+        retainDraftDuringSessionCreation: expect.any(Function),
+      },
     );
   });
 
@@ -1597,7 +1612,10 @@ describe('useComposerCore paste', () => {
         expect.objectContaining({ name: 'my app (1).log' }),
       ],
       expect.any(Function),
-      undefined,
+      {
+        isCurrentDraft: expect.any(Function),
+        retainDraftDuringSessionCreation: expect.any(Function),
+      },
     );
   });
 
@@ -1930,7 +1948,11 @@ describe('useComposerCore tags', () => {
       undefined,
       undefined,
       expect.any(Function),
-      { inputAnnotations },
+      {
+        inputAnnotations,
+        isCurrentDraft: expect.any(Function),
+        retainDraftDuringSessionCreation: expect.any(Function),
+      },
     );
   });
 
@@ -1967,6 +1989,8 @@ describe('useComposerCore tags', () => {
       undefined,
       expect.any(Function),
       {
+        isCurrentDraft: expect.any(Function),
+        retainDraftDuringSessionCreation: expect.any(Function),
         inputAnnotations: [
           expect.objectContaining({ start: 0, end: 2, text: '@b' }),
           expect.objectContaining({ start: 7, end: 9, text: '@a' }),
@@ -2001,6 +2025,8 @@ describe('useComposerCore tags', () => {
       undefined,
       expect.any(Function),
       {
+        isCurrentDraft: expect.any(Function),
+        retainDraftDuringSessionCreation: expect.any(Function),
         inputAnnotations: [
           expect.objectContaining({
             start: 7,
@@ -2037,7 +2063,10 @@ describe('useComposerCore tags', () => {
       undefined,
       undefined,
       expect.any(Function),
-      undefined,
+      {
+        isCurrentDraft: expect.any(Function),
+        retainDraftDuringSessionCreation: expect.any(Function),
+      },
     );
   });
 
@@ -2152,8 +2181,18 @@ describe('useComposerCore tags', () => {
         }
         return appendChild.call(this, child);
       });
+    // The failed tooltip root's unmount is only observable from inside the
+    // catch: mount()'s act() drains the deferred microtask before returning.
+    const probeRoot = createRoot(document.createElement('span'));
+    const unmount = vi.spyOn(
+      Object.getPrototypeOf(probeRoot) as Root,
+      'unmount',
+    );
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {
       expect(readFailingChipTitle?.()).toBe('Details');
+      // Root.unmount() flushes sync work across ALL roots, which would re-enter
+      // CodeMirror mid-update (#12826), so it must not run inside the catch.
+      expect(unmount).not.toHaveBeenCalled();
     });
 
     try {
@@ -2169,6 +2208,8 @@ describe('useComposerCore tags', () => {
         '[WebShell] inline tag tooltip render failed',
         error,
       );
+      // Deferred, not skipped: the failed root is still unmounted exactly once.
+      expect(unmount).toHaveBeenCalledTimes(1);
       const chip = document.body.querySelector('[title="Details"]');
       expect(chip).not.toBeNull();
       expect(document.body.querySelector('[role="tooltip"]')).toBeNull();
@@ -2176,6 +2217,8 @@ describe('useComposerCore tags', () => {
       expect(failingTooltip?.style.display).toBe('none');
     } finally {
       warn.mockRestore();
+      unmount.mockRestore();
+      probeRoot.unmount();
       appendChildSpy.mockRestore();
     }
   });
@@ -2367,6 +2410,8 @@ describe('useComposerCore tags', () => {
       undefined,
       expect.any(Function),
       {
+        isCurrentDraft: expect.any(Function),
+        retainDraftDuringSessionCreation: expect.any(Function),
         inputAnnotations: [
           {
             end: 9,
@@ -2428,6 +2473,8 @@ describe('useComposerCore tags', () => {
       undefined,
       expect.any(Function),
       {
+        isCurrentDraft: expect.any(Function),
+        retainDraftDuringSessionCreation: expect.any(Function),
         inputAnnotations: [
           expect.objectContaining({
             start: 8,
@@ -2608,6 +2655,8 @@ describe('useComposerCore tags', () => {
       undefined,
       expect.any(Function),
       {
+        isCurrentDraft: expect.any(Function),
+        retainDraftDuringSessionCreation: expect.any(Function),
         inputAnnotations: [
           expect.objectContaining({
             start: 8,
@@ -2669,6 +2718,8 @@ describe('useComposerCore tags', () => {
       undefined,
       expect.any(Function),
       {
+        isCurrentDraft: expect.any(Function),
+        retainDraftDuringSessionCreation: expect.any(Function),
         inputAnnotations: [
           expect.objectContaining({
             start: 8,
@@ -2706,7 +2757,10 @@ describe('useComposerCore tags', () => {
       undefined,
       undefined,
       expect.any(Function),
-      undefined,
+      {
+        isCurrentDraft: expect.any(Function),
+        retainDraftDuringSessionCreation: expect.any(Function),
+      },
     );
   });
 
@@ -2751,7 +2805,10 @@ describe('useComposerCore tags', () => {
       undefined,
       undefined,
       expect.any(Function),
-      undefined,
+      {
+        isCurrentDraft: expect.any(Function),
+        retainDraftDuringSessionCreation: expect.any(Function),
+      },
     );
   });
 
@@ -2788,6 +2845,8 @@ describe('useComposerCore tags', () => {
       undefined,
       expect.any(Function),
       {
+        isCurrentDraft: expect.any(Function),
+        retainDraftDuringSessionCreation: expect.any(Function),
         inputAnnotations: [
           expect.objectContaining({
             start: 8,
@@ -2800,5 +2859,101 @@ describe('useComposerCore tags', () => {
     );
     expect(editor.textContent).toContain('orders');
     expect(editor.textContent).not.toContain(serialized);
+  });
+});
+
+it('invalidates a pending capacity continuation when the composer draft changes', async () => {
+  const onSubmit = vi.fn(() => false);
+  await mount({ onSubmit });
+  act(() => {
+    latest!.setText('original');
+    latest!.submitText();
+  });
+  const metadata = onSubmit.mock.calls[0]?.[4] as unknown as {
+    isCurrentDraft(): boolean;
+  };
+  expect(metadata.isCurrentDraft()).toBe(true);
+  act(() => latest!.setText('new draft'));
+  expect(metadata.isCurrentDraft()).toBe(false);
+  act(() => latest!.setText('original'));
+  expect(metadata.isCurrentDraft()).toBe(false);
+});
+
+it('retains the guarded retry draft across its initial session allocation and clears it only on acceptance', async () => {
+  const onSubmit = vi.fn(() => false);
+  const mounted = await mount({ onSubmit, atWorkspaceCwd: '/work/b' });
+  act(() => {
+    latest!.setText('original');
+    latest!.submitText();
+  });
+  const call = onSubmit.mock.calls[0] as unknown as [
+    string,
+    unknown,
+    unknown,
+    () => void,
+    import('./useComposerCore').ComposerSubmitMetadata,
+  ];
+  await call[4].retainDraftDuringSessionCreation!(
+    async (onSessionAllocated) => {
+      onSessionAllocated('created-session');
+      mounted.switchSession('created-session', '/work/b');
+      await act(async () => {});
+      expect(latest!.getText()).toBe('original');
+      expect(call[4].isCurrentDraft!({ allowSessionAssignment: true })).toBe(
+        true,
+      );
+      act(() => call[3]());
+    },
+  );
+  expect(latest!.getText()).toBe('');
+});
+
+it('unrelated existing session keeps its draft during retry creation', async () => {
+  const onSubmit = vi.fn(() => false);
+  const mounted = await mount({ onSubmit, atWorkspaceCwd: '/work/b' });
+  localStorage.setItem(getSessionDraftKey('existing-b'), 'B draft');
+  act(() => {
+    latest!.setText('original');
+    latest!.submitText();
+  });
+  const call = onSubmit.mock.calls[0] as unknown as [
+    string,
+    unknown,
+    unknown,
+    () => void,
+    import('./useComposerCore').ComposerSubmitMetadata,
+  ];
+  await call[4].retainDraftDuringSessionCreation!(async () => {
+    mounted.switchSession('existing-b', '/work/b');
+    await act(async () => {});
+    expect(call[4].isCurrentDraft!({ allowSessionAssignment: true })).toBe(
+      false,
+    );
+    expect(latest!.getText()).toBe('B draft');
+    expect(localStorage.getItem(getSessionDraftKey('existing-b'))).toBe(
+      'B draft',
+    );
+  });
+});
+it('late acceptance does not clear unrelated existing session draft', async () => {
+  const onSubmit = vi.fn(() => false);
+  const mounted = await mount({ onSubmit, atWorkspaceCwd: '/work/b' });
+  localStorage.setItem(getSessionDraftKey('existing-b'), 'B draft');
+  act(() => {
+    latest!.setText('original');
+    latest!.submitText();
+  });
+  const call = onSubmit.mock.calls[0] as unknown as [
+    string,
+    unknown,
+    unknown,
+    () => void,
+    import('./useComposerCore').ComposerSubmitMetadata,
+  ];
+  await call[4].retainDraftDuringSessionCreation!(async () => {
+    mounted.switchSession('existing-b', '/work/b');
+    await act(async () => {});
+    act(() => call[3]());
+    expect(latest!.getText()).toBe('B draft');
   });
 });

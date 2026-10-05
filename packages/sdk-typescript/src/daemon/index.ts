@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+export { DaemonAttachmentUploadError } from './DaemonAttachmentUploadError.js';
 export {
   DaemonClient,
   DaemonHttpError,
@@ -22,6 +23,7 @@ export {
   type NonBlockingPromptAccepted,
   type PromptRequest,
   type RestoreSessionRequest,
+  type ResumeSessionRequest,
   type SubscribeOptions,
   type WorktreeResetSessionRequest,
 } from './DaemonClient.js';
@@ -50,6 +52,10 @@ export type { RestSseTransport } from './RestSseTransport.js';
 // The `NegotiateTransportOptions` *type* stays available from this barrel
 // for backward compatibility (type-only, no bundle cost).
 export type { NegotiateTransportOptions } from './negotiateTransport.js';
+export {
+  WEB_SHELL_PWA_ASSETS,
+  WEB_SHELL_SERVICE_WORKER_ROUTE,
+} from './pwa-assets.js';
 export type { JsonRpcNotification } from './AcpEventDenormalizer.js';
 export type { TransportFactory } from './AutoReconnectTransport.js';
 export {
@@ -92,6 +98,7 @@ export {
   type DaemonUnarchiveStandaloneSessionsResult,
   type RestoreStandaloneSessionRequest,
 } from './standalone-sessions.js';
+export { DaemonStartupConfigError } from './session-startup-config.js';
 export {
   asKnownDaemonEvent,
   DAEMON_KNOWN_EVENT_TYPE_VALUES,
@@ -133,6 +140,7 @@ export {
   estimateDaemonTranscriptBlockBytes,
   extractContentPart,
   extractServerTimestamp,
+  extractTranscriptTiming,
   formatBlockTimestamp,
   getOutputText as getDaemonUiOutputText,
   getSessionUpdatePayload,
@@ -198,7 +206,9 @@ export type {
   DaemonTranscriptSidechannelState,
   DaemonTranscriptState,
   DaemonTranscriptStore,
+  DaemonTranscriptTimingMeta,
   DaemonTranscriptTruncationDetail,
+  DaemonTurnUsage,
   DaemonUiAssistantDoneEvent,
   DaemonUiAuthDeviceFlowAuthorizedEvent,
   DaemonUiAuthDeviceFlowCancelledEvent,
@@ -535,12 +545,17 @@ export type {
   DaemonDiffHunk,
   DaemonGitLogEntry,
   DaemonGitLog,
+  DaemonGitLogOptions,
   DaemonGitCommitFileStat,
   DaemonGitCommitDetail,
   DaemonGitBranchInfo,
   DaemonGitTagInfo,
   DaemonGitBranchesResult,
   DaemonGitCheckoutResult,
+  DaemonGitWorktree,
+  DaemonGitWorktreesResult,
+  DaemonGitWorktreeStatus,
+  DaemonGitWorktreeRemoveResult,
   DaemonGitPushResult,
   DaemonGitPullResult,
   DaemonGitCommitResult,
@@ -554,6 +569,14 @@ export type {
   DaemonGitHubPullRequestCreateResult,
   DaemonWorkspaceRemovalActivity,
   DaemonWorkspaceRemovalResult,
+  DaemonRuntimeStopRequest,
+  DaemonRuntimeStopSession,
+  DaemonRuntimeStopChannel,
+  DaemonRuntimeStopResult,
+  DaemonRuntimeStopSnapshot,
+  DaemonRuntimeStopOption,
+  DaemonRuntimeStopOptions,
+  DaemonWorkspaceRuntimeStopResult,
   DaemonAvailableCommand,
   DaemonArchiveSessionsResult,
   DaemonBrand,
@@ -578,6 +601,7 @@ export type {
   DaemonBranchSessionResult,
   DaemonBranchedSession,
   HistoricalBranchSessionRequest,
+  WorktreeBranchSessionRequest,
   DaemonPersistedBranchedSession,
   DaemonSideTaskSession,
   DaemonForkSessionResult,
@@ -593,6 +617,7 @@ export type {
   DaemonBranchPoint,
   DaemonSessionExportFormat,
   DaemonSessionExportResult,
+  DaemonSessionToolCalls,
   DaemonSessionTranscriptPage,
   DaemonSessionTranscriptPageOptions,
   DaemonSessionTurnIndexEntry,
@@ -616,6 +641,8 @@ export type {
   DaemonLspServerStatus,
   DaemonSessionLspStatus,
   DaemonSessionResourcesStatus,
+  DaemonMcpAppToolCall,
+  DaemonMcpAppToolResult,
   DaemonSessionAgentTaskStatus,
   DaemonSessionMonitorTaskStatus,
   DaemonSessionWorkflowTaskStatus,
@@ -640,6 +667,11 @@ export type {
   DaemonSessionGroupUpdate,
   DaemonSessionListPage,
   DaemonSessionListPageOptions,
+  DaemonSessionCatalogWorkspace,
+  DaemonSessionCatalogRequest,
+  DaemonSessionCatalogPage,
+  DaemonSessionCatalogError,
+  DaemonSessionCatalogResult,
   DaemonSessionListView,
   DaemonSessionSearchMatch,
   DaemonSessionSearchOptions,
@@ -690,6 +722,7 @@ export type {
   DaemonLogIssue,
   DaemonLogMode,
   DaemonStatusReport,
+  DaemonUpdateStatus,
   DaemonStatusReportDetail,
   DaemonStatusReportIssue,
   DaemonStatusReportLevel,
@@ -774,6 +807,8 @@ export type {
   DaemonExtensionEntry,
   DaemonExtensionUpdateState,
   DaemonWorkspaceExtensionsStatus,
+  DaemonExtensionSummary,
+  DaemonWorkspaceExtensionSummaries,
   ExtensionInstallRequest,
   ExtensionArchiveInstallRequest,
   ExtensionManagementInstallRequest,
@@ -819,6 +854,8 @@ export type {
   SetModelResult,
   DaemonSessionConfigOptionResult,
   ReasoningSelection,
+  SessionStartupConfig,
+  SessionStartupConfigApplied,
   SetSessionLanguageResult,
   SetUserLanguageResult,
   KnownDaemonSessionArtifactChangeAction,
@@ -856,3 +893,6 @@ export type {
 
 export { parseDaemonBackgroundTurn } from './types.js';
 export type { DaemonBackgroundTurn } from './types.js';
+
+export { isShellResultDisplay } from './shellResult.js';
+export type { ShellResultDisplay } from './shellResult.js';

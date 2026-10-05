@@ -77,11 +77,17 @@ import {
 import type { ExtensionWorkflowDefinition } from '../../agents/runtime/workflow-extension.js';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
-import type {
-  WorkflowDispatchTraceStatus,
-  WorkflowTask,
+import {
+  isActiveWorkflowStatus,
+  type WorkflowDispatchTraceStatus,
+  type WorkflowTask,
 } from '../../agents/workflow-run-registry.js';
 import { buildFailureLines } from '../../agents/workflow-failure-lines.js';
+import {
+  sanitizeWorkflowText,
+  stringifyWorkflowResult,
+  workflowResultReplacer,
+} from '../../agents/workflow-result-format.js';
 import {
   buildWorkflowSizeGuidelineParagraph,
   resolveWorkflowSizeGuidelineSetting,
@@ -91,7 +97,7 @@ import { scanWorkflowScriptShape } from '../../agents/runtime/workflow-script-sh
 import {
   readWorkflowAuthoringReference,
   resolveWorkflowAuthoringSurface,
-  toolSearchRevealSentence,
+  toolSearchBridgeSentence,
   WORKFLOW_AUTHORING_SKILL_NAME,
   type WorkflowAuthoringReference,
   type WorkflowAuthoringSurface,
@@ -99,6 +105,7 @@ import {
 import {
   buildResumeCall,
   hasUninlinableResumeArgs,
+  NO_JOURNAL_NO_RESUME_NOTE,
   RESUME_ARGS_TOO_LARGE_NOTE,
 } from '../../agents/workflow-resume-call.js';
 
@@ -233,7 +240,8 @@ const WORKFLOW_PARAM_SCHEMA = {
         'first changed/missing call onward runs live. Pass the `scriptPath` ' +
         'the original run returned and the same `args`. Editing a saved ' +
         'workflow changes future runs too, so copy it for run-specific edits. ' +
-        'Replay requires a journal; without one, every agent() call runs live. ' +
+        'A run whose journal is not on disk has nothing to resume and is ' +
+        'refused; call again without `resumeFromRunId` to start over. ' +
         'The journal keys hash each agent() ' +
         "call's prompt and opts, not the script text, so post-processing can " +
         'change without losing the cache.',
@@ -256,6 +264,14 @@ class WorkflowToolInvocation extends BaseToolInvocation<
   WorkflowToolResult
 > {
   private callId?: string;
+  private notifyOnCompletion = false;
+
+  setCompletionNotificationEnabled(enabled: boolean): void {
+    this.notifyOnCompletion =
+      enabled &&
+      this.config.isInteractive?.() === true &&
+      this.config.getExperimentalZedIntegration?.() !== true;
+  }
 
   /**
    * The failure hint, when the failing script is one this call authored.
@@ -542,6 +558,7 @@ class WorkflowToolInvocation extends BaseToolInvocation<
         resumeFromRunId: this.params.resumeFromRunId,
         dispatch: this.toolOptions.dispatch,
         runInBackground,
+        notifyOnCompletion: this.notifyOnCompletion,
         ...(!this.sessionOwned && this.config.isWorkflowNameOnly?.() === true
           ? { restrictNestedScriptPaths: true }
           : {}),
@@ -703,7 +720,7 @@ class WorkflowToolInvocation extends BaseToolInvocation<
       const failureText = cancelled
         ? 'Workflow cancelled.'
         : `Workflow failed: ${clampForDisplay(
-            sanitizeBlock(message),
+            sanitizeWorkflowText(message),
             TRAILER_ERROR_CHARS,
           )}`;
       const trailer = buildRunTrailer(
@@ -866,7 +883,9 @@ function buildRunTrailer(
       ? { nameOnly: true, resumeName: entry?.resumeName }
       : {}),
   });
-  if (resume && includeResume) {
+  // A resume replays the run's journal, so a run that wrote none is not
+  // offered one: the call would be refused.
+  if (resume && includeResume && handle.journalPath) {
     // A name-only resume call is built from the name, not the path, so the
     // path is read only when the run has one.
     const scriptPath = handle.scriptPath;
@@ -886,13 +905,14 @@ function buildRunTrailer(
             !isGeneratedWorkflowScriptPath(config, scriptPath))
         ? 'this reads the saved workflow; copy it before making a run-specific change'
         : 'edit that generated copy first if the script needs to change';
-    const journalAdvice = handle.journalPath
-      ? 'the journal replays the longest unchanged prefix of agent() calls, and the first changed call onward runs live'
-      : 'no journal was written for this run, so every agent() call runs live';
-    lines.push(`resume: ${resume} — ${pathAdvice}; ${journalAdvice}.`);
+    lines.push(
+      `resume: ${resume} — ${pathAdvice}; the journal replays the longest unchanged prefix of agent() calls, and the first changed call onward runs live.`,
+    );
     if (hasUninlinableResumeArgs({ runId: handle.runId, args })) {
       lines.push(RESUME_ARGS_TOO_LARGE_NOTE);
     }
+  } else if (resume && includeResume) {
+    lines.push(NO_JOURNAL_NO_RESUME_NOTE);
   }
   // A script that threw has to be rewritten, and the model may have written
   // it without reading the reference — the description only points at it. The
@@ -978,7 +998,13 @@ function buildLivePhaseTreeDisplay(entry: WorkflowTask): string {
     };
   }
   try {
-    return '```json\n' + JSON.stringify(payload, null, 2) + '\n```';
+    const guidance =
+      entry.notifyOnCompletion &&
+      !entry.isBackgrounded &&
+      isActiveWorkflowStatus(entry.status)
+        ? `Workflow ${entry.runId}: watch progress in this tool card.\n`
+        : '';
+    return guidance + '```json\n' + JSON.stringify(payload, null, 2) + '\n```';
   } catch {
     return `Workflow ${entry.runId} — ${entry.status} — ${entry.phases.length} phase(s)`;
   }
@@ -1039,23 +1065,6 @@ const CONFIRM_STRUCTURE_HEADING =
  */
 function sanitizeLine(text: string): string {
   return stripAnsiAndControl(text);
-}
-
-/**
- * Sanitize text whose line structure is meaningful (the script excerpt).
- *
- * `stripAnsiAndControl` removes C0 controls, and `\n` is one of them — running
- * it over a script would collapse it to a single unreadable line. Sanitize each
- * line separately so the structure survives while escape sequences do not.
- * Tabs become spaces first, since they would otherwise be stripped and silently
- * destroy indentation.
- */
-function sanitizeBlock(text: string): string {
-  return text
-    .replace(/\t/g, '  ')
-    .split('\n')
-    .map((line) => stripAnsiAndControl(line))
-    .join('\n');
 }
 
 /** Clamp already-sanitized text, naming what was dropped rather than eliding it. */
@@ -1244,7 +1253,10 @@ function buildConfirmationPrompt(
       loaded
         ? `Script (${WORKFLOW_RULE_DIGEST_KEY} ${loaded.digest}):`
         : 'Script:',
-      clampForDisplay(sanitizeBlock(scriptText), CONFIRM_SCRIPT_EXCERPT_CHARS),
+      clampForDisplay(
+        sanitizeWorkflowText(scriptText),
+        CONFIRM_SCRIPT_EXCERPT_CHARS,
+      ),
     );
   }
 
@@ -1411,13 +1423,7 @@ function safeEmitUpdate(
  * successful workflow is not reported as a failure.
  */
 function safeStringifyResult(result: unknown): string {
-  if (result === undefined) return '(workflow returned no value)';
-  if (typeof result === 'string') return result;
-  try {
-    return JSON.stringify(result, null, 2);
-  } catch {
-    return `(workflow returned a non-JSON-serializable value of type ${typeof result})`;
-  }
+  return stringifyWorkflowResult(result, true);
 }
 
 /**
@@ -1431,13 +1437,13 @@ function safeStringifyResult(result: unknown): string {
  */
 function safeStringifyDisplayPayload(payload: unknown): string {
   try {
-    return JSON.stringify(payload, null, 2);
+    return JSON.stringify(payload, workflowResultReplacer, 2);
   } catch {
     if (payload && typeof payload === 'object') {
       const sanitized: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(payload)) {
         try {
-          JSON.stringify(value);
+          JSON.stringify(value, workflowResultReplacer);
           sanitized[key] = value;
         } catch {
           sanitized[key] =
@@ -1445,7 +1451,7 @@ function safeStringifyDisplayPayload(payload: unknown): string {
         }
       }
       try {
-        return JSON.stringify(sanitized, null, 2);
+        return JSON.stringify(sanitized, workflowResultReplacer, 2);
       } catch {
         // Fall through to the generic fallback string below.
       }
@@ -1553,7 +1559,7 @@ const WORKFLOW_TOOL_RUNTIME_NAME_ONLY = withReplacements(
 );
 
 /** Appended to the pointer when a `tools.eager` allowlist defers the Skill tool. */
-const WORKFLOW_AUTHORING_TOOL_SEARCH_NOTE = ` ${toolSearchRevealSentence(ToolDisplayNames.SKILL)}`;
+const WORKFLOW_AUTHORING_TOOL_SEARCH_NOTE = ` ${toolSearchBridgeSentence(ToolDisplayNames.SKILL)}`;
 
 /**
  * Leads the inlined reference. The reference is written for sessions that can
@@ -1699,7 +1705,7 @@ function buildWorkflowAuthoringHint(
     case 'pointer-via-tool-search':
       // The retry moment is exactly when the model reaches for the Skill tool,
       // so the detour the description names has to be repeated here.
-      return `${loadSkill} ${toolSearchRevealSentence(ToolDisplayNames.SKILL)}`;
+      return `${loadSkill} ${toolSearchBridgeSentence(ToolDisplayNames.SKILL)}`;
     case 'inline':
       return "hint: See the authoring reference in this tool's description, fix the script, and retry.";
     case 'withheld':
